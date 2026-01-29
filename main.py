@@ -3,6 +3,7 @@ from tkinter import filedialog, messagebox
 import os
 import subprocess
 import platform
+import json
 
 try:
     from arabic_reshaper import reshape
@@ -31,8 +32,17 @@ class ExcelManagerApp:
         self.root.title("أرشيف مؤسسة")
         self.root.geometry("1000x750")
         
+        # Fichier de sauvegarde
+        self.config_file = "dossiers_config.json"
+        
         # Dictionnaire pour stocker les chemins des dossiers pour chaque bouton
         self.dossiers = {i: None for i in range(1, 18)}
+        
+        # Charger la configuration sauvegardée
+        self.charger_configuration()
+        
+        # Sauvegarder automatiquement lors de la fermeture
+        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
         
         # Titre de l'application en arabe
         titre_text = format_arabic("إدارة المجلدات")
@@ -114,6 +124,9 @@ class ExcelManagerApp:
                 'label': label_statut
             }
         
+        # Restaurer l'apparence des boutons après chargement
+        self.restaurer_apparence()
+        
         # Frame pour les boutons d'action globaux
         frame_actions = ctk.CTkFrame(root, fg_color="transparent")
         frame_actions.pack(pady=25)
@@ -132,6 +145,54 @@ class ExcelManagerApp:
             command=self.reinitialiser_tout
         )
         btn_reset.pack()
+    
+    def charger_configuration(self):
+        """Charger la configuration sauvegardée depuis le fichier JSON"""
+        try:
+            if os.path.exists(self.config_file):
+                with open(self.config_file, 'r', encoding='utf-8') as f:
+                    config = json.load(f)
+                    # Convertir les clés de string à int
+                    self.dossiers = {int(k): v for k, v in config.items()}
+                print(f"Configuration chargée : {len([d for d in self.dossiers.values() if d])} dossiers")
+        except Exception as e:
+            print(f"Erreur lors du chargement de la configuration : {e}")
+            self.dossiers = {i: None for i in range(1, 18)}
+    
+    def sauvegarder_configuration(self):
+        """Sauvegarder la configuration dans un fichier JSON"""
+        try:
+            with open(self.config_file, 'w', encoding='utf-8') as f:
+                json.dump(self.dossiers, f, ensure_ascii=False, indent=2)
+            print(f"Configuration sauvegardée : {len([d for d in self.dossiers.values() if d])} dossiers")
+        except Exception as e:
+            print(f"Erreur lors de la sauvegarde de la configuration : {e}")
+    
+    def restaurer_apparence(self):
+        """Restaurer l'apparence des boutons selon les dossiers sauvegardés"""
+        for i in range(1, 18):
+            if self.dossiers[i] and os.path.exists(self.dossiers[i]):
+                # Dossier valide, mettre à jour l'apparence
+                nom_dossier = os.path.basename(self.dossiers[i])
+                if not nom_dossier:
+                    nom_dossier = self.dossiers[i]
+                
+                self.boutons[i]['label'].configure(
+                    text=nom_dossier,
+                    text_color="#2ecc71"
+                )
+                self.boutons[i]['bouton'].configure(fg_color="#27ae60")
+            else:
+                # Dossier invalide, réinitialiser
+                if self.dossiers[i]:
+                    print(f"Dossier {i} n'existe plus : {self.dossiers[i]}")
+                    self.dossiers[i] = None
+    
+    def on_closing(self):
+        """Appelé lors de la fermeture de l'application"""
+        # Sauvegarder avant de fermer
+        self.sauvegarder_configuration()
+        self.root.destroy()
     
     def gerer_dossier(self, numero):
         """Gérer la sélection ou l'ouverture du dossier"""
@@ -152,6 +213,9 @@ class ExcelManagerApp:
             # Vérifier si le dossier existe
             if os.path.exists(dossier) and os.path.isdir(dossier):
                 self.dossiers[numero] = dossier
+                # Sauvegarder immédiatement
+                self.sauvegarder_configuration()
+                
                 # Mettre à jour le label avec le nom du dossier
                 nom_dossier = os.path.basename(dossier)
                 if not nom_dossier:  # Si c'est la racine d'un disque
@@ -211,6 +275,7 @@ class ExcelManagerApp:
             )
             # Réinitialiser ce bouton
             self.dossiers[numero] = None
+            self.sauvegarder_configuration()
             self.boutons[numero]['label'].configure(
                 text=format_arabic("لا يوجد مجلد"),
                 text_color="gray"
@@ -232,6 +297,9 @@ class ExcelManagerApp:
                     text_color="gray"
                 )
                 self.boutons[i]['bouton'].configure(fg_color=["#3B8ED0", "#1F6AA5"])
+            
+            # Sauvegarder la réinitialisation
+            self.sauvegarder_configuration()
             
             messagebox.showinfo(
                 format_arabic("إعادة التعيين"),
